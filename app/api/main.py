@@ -12,6 +12,7 @@ import pandas as pd
 from fastapi import Depends, FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, JSONResponse
+from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
 from app.api import auth
@@ -250,6 +251,12 @@ def backtest_report(run_id: str, p=Depends(auth.principal)):
             raise HTTPException(404, "报告不存在")
         path = cands[-1]
     return FileResponse(path, media_type="text/html")
+
+
+# 控制台静态资源同源提供：ops 运维台只需一个端口（8102）即可打开界面
+CONSOLE_DIR = settings.ROOT / "app" / "console"
+if CONSOLE_DIR.is_dir():
+    app.mount("/", StaticFiles(directory=str(CONSOLE_DIR), html=True), name="console")
 
 
 class SignalReq(BaseModel):
