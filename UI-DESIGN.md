@@ -388,11 +388,28 @@ open prototype/pages/index.html               # 从总览页点击进入各页
 | 按钮断行 | 「取消」被挤成两行 | `.btn{white-space:nowrap}` |
 | 脏值扫描误报 | 技术标签（如「置 NaN 重跑」）被当脏值 | 扫描范围收敛到表格单元格与 KPI 数值 |
 
+### 14.2b 运行态控制台（P2 已交付，浏览器实测通过）
+
+`app/console/`：Vue 3 全局构建 + Element Plus **本地 vendored**（`vendor/`，离线、无构建步骤），
+8 页接真 API：总览 / 数据 / 研究 / 回测 / 信号 / 模拟盘 / 风控 / 系统。
+菜单两级分组 + 一级 SVG 图标 + 选中指示条；登录用 dev 令牌（`~/.config/quant-pro/auth.json`，600）。
+
+实测截图（`scripts/ui_smoke.py`，Playwright + Chromium，控制台 0 error）：
+
+| 截图 | 内容 |
+|---|---|
+| ![dash](data/reports/ui/01-dashboard.png) | 总览：KPI + 最近回测净值 + 熔断横幅 |
+| ![data](data/reports/ui/02-data.png) | 数据质量 issue + 作业 + 修正留痕入口 |
+| ![signal](data/reports/ui/09-signal-draft.png) | 信号草稿 + 四项前置校验面板 |
+| ![pub](data/reports/ui/10-signal-published.png) | 勾选确认后发布 |
+| ![recon](data/reports/ui/11-paper-recon.png) | 模拟盘对账（产物级重算，无手工调整入口） |
+
 ### 14.3 原型与运行态边界
 
 | 页面 | 视觉稿（可点击 HTML，数字为演示占位） | 运行态（Vue + 真接口） |
 |---|---|---|
-| 全部 20 页 | ✅ 已交付 | ❌ 未开始（P2） |
+| 视觉稿 20 页 | ✅ 已交付 | — |
+| 运行态控制台 8 页 | — | ✅ P2 已交付并浏览器实测 |
 | 生效条件 | 直接打开 HTML | 需 `npm run build` + api(:8102)/worker 运行；未联调页面不得标「运行态」 |
 
 评审纪律：视觉稿用于定版式、口径展示与交互路径；**结论数字必须来自引擎真实产物**

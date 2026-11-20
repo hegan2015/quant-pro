@@ -1,0 +1,25 @@
+
+:root{
+  --brand-600:#0F4C81; --brand-100:#E8F0FE;
+  --market-up:#D6453D; --market-down:#1F9254; --market-flat:#8A93A2;
+  --ok-600:#2F8540; --warn-600:#B26A00; --err-600:#B33771; --info-600:#3B6FD4;
+  --text-1:#1A1D22; --text-2:#545C68; --text-3:#8A93A2;
+  --bg-0:#FFFFFF; --bg-1:#F5F7FA; --bg-2:#EDEFF3;
+  --line-1:#E3E7ED; --line-2:#CDD4DE;
+  --chart-1:#0F4C81; --chart-2:#B26A00; --chart-3:#2F8540; --chart-4:#B33771;
+  --chart-5:#3B6FD4; --chart-6:#7A5AF8; --chart-7:#0FA3A3; --chart-8:#6B7280;
+  --font-ui:-apple-system,"PingFang SC","Microsoft YaHei","Helvetica Neue",sans-serif;
+  --font-num:"JetBrains Mono","SF Mono",ui-monospace,monospace;
+  --fs-xs:12px; --fs-sm:13px; --fs-base:14px; --fs-lg:16px; --fs-xl:20px; --fs-2xl:24px;
+  --lh-tight:1.25; --lh-normal:1.5;
+  --sp-1:4px; --sp-2:8px; --sp-3:12px; --sp-4:16px; --sp-5:24px; --sp-6:32px; --sp-7:48px;
+  --r-sm:4px; --r-md:8px;
+  --sh-1:0 1px 2px rgba(16,24,40,.06); --sh-2:0 4px 16px rgba(16,24,40,.10);
+  --row-h-compact:32px; --row-h-default:40px;
+  --z-nav:100; --z-dropdown:500; --z-modal:900; --z-toast:1000;
+}
+[data-theme="dark"]{
+  --bg-0:#12161C; --bg-1:#171D25; --bg-2:#1E252F;
+  --text-1:#E6EAF0; --text-2:#AEB8C6; --text-3:#7C8797;
+  --line-1:#262F3A; --line-2:#37424F; --sh-2:0 4px 16px rgba(0,0,0,.5);
+}

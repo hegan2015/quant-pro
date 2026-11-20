@@ -220,14 +220,13 @@ class Engine:
             scale = (float(ac[s]) / float(cc[s])) if (s in ac.index and s in cc.index
                                                       and pd.notna(ac[s]) and pd.notna(cc[s])
                                                       and float(cc[s]) > 0) else 1.0
-            slipped = float(self.cost.exec_price(float(px_open), BUY)) \
-                if delta > 0 else float(self.cost.exec_price(float(px_open), SELL))
-            px_adj = None if px_open is None or pd.isna(px_open) else slipped * scale
             if px_open is None or pd.isna(px_open) or px_open <= 0:
                 if abs(delta) > 1:
                     self._reject(s, D, exec_day, BUY if delta > 0 else SELL,
                                  abs(delta) / 100, "NO_BAR", ref)
                 continue
+            slipped = float(self.cost.exec_price(float(px_open), BUY if delta > 0 else SELL))
+            px_adj = slipped * scale
             if delta < -1 and cur_qty > 0:
                 q = min(cur_qty, floor_lot(-delta / px_adj))
                 if tgt_val < px_adj * 100 * 0.5:        # 目标≈0 → 含零股全卖

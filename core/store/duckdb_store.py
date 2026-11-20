@@ -10,6 +10,7 @@ from __future__ import annotations
 import hashlib
 import json
 import os
+import threading
 from datetime import date, datetime
 
 import duckdb
@@ -29,6 +30,9 @@ BAR_FIELDS = ["open", "high", "low", "close", "pre_close", "volume", "amount",
 
 
 class DuckDBStore:
+    # DuckDB 同进程同文件单连接；并发请求必须串行化（cursor 仍共享连接锁）
+    _lock = threading.RLock()
+
     def __init__(self, path: str):
         self.path = path
         os.makedirs(os.path.dirname(os.path.abspath(path)), exist_ok=True)
@@ -37,21 +41,44 @@ class DuckDBStore:
 
     # ---------------------------------------------------------------- 取数封装
     def query(self, sql: str, args: list | None = None) -> list[tuple]:
-        """duckdb 2.x 的 fetchone() 不会排空结果，未 complete 会让后续 register 失败。"""
-        # duckdb 的 execute() 返回连接自身：只能靠 fetchall() 排空结果，
-        # 调 close() 会直接关掉连接。
-        return self.con.execute(sql, args or []).fetchall()
+        """每操作独立 cursor + 进程锁：同进程同文件单连接，并发请求串行化。"""
+        with self._lock:
+            cur = self.con.cursor()
+            try:
+                return cur.execute(sql, args or []).fetchall()
+            finally:
+                cur.close()
 
     def query_df(self, sql: str, args: list | None = None) -> pd.DataFrame:
-        return self.con.execute(sql, args or []).fetchdf()
+        with self._lock:
+            cur = self.con.cursor()
+            try:
+                return cur.execute(sql, args or []).fetchdf()
+            finally:
+                cur.close()
+
+    def query_df_with(self, name: str, df: pd.DataFrame, sql: str) -> pd.DataFrame:
+        """在同一 cursor 内注册临时关系并查询（父连接注册对 cursor 不可见）。"""
+        with self._lock:
+            cur = self.con.cursor()
+            try:
+                cur.register(name, df)
+                return cur.execute(sql).fetchdf()
+            finally:
+                cur.unregister(name)
+                cur.close()
 
     def scalar(self, sql: str, args: list | None = None):
         rows = self.query(sql, args)
         return rows[0][0] if rows and rows[0] else None
 
     def execute(self, sql: str, args: list | None = None) -> None:
-        """写操作统一入口：fetchall() 排空结果，否则同连接后续 register 会 ResourceInUse。"""
-        self.con.execute(sql, args or []).fetchall()
+        with self._lock:
+            cur = self.con.cursor()
+            try:
+                cur.execute(sql, args or []).fetchall()
+            finally:
+                cur.close()
 
     # ---------------------------------------------------------------- 基础设施
     def init_schema(self) -> None:
@@ -64,7 +91,6 @@ class DuckDBStore:
     def _upsert(self, table: str, df: pd.DataFrame, conflict: list[str] | None = None) -> int:
         if df is None or df.empty:
             return 0
-        self.con.register("_src", df)
         cols = ", ".join(df.columns)
         if conflict:
             # 表存在多个唯一约束时（如 job_run），INSERT OR REPLACE 无法判定冲突目标
@@ -73,8 +99,14 @@ class DuckDBStore:
                    f"ON CONFLICT ({', '.join(conflict)}) DO UPDATE SET {sets}")
         else:
             sql = f"INSERT OR REPLACE INTO {table} ({cols}) SELECT {cols} FROM _src"
-        self.execute(sql)
-        self.con.unregister("_src")
+        with self._lock:
+            cur = self.con.cursor()
+            try:
+                cur.register("_src", df)
+                cur.execute(sql).fetchall()
+            finally:
+                cur.unregister("_src")
+                cur.close()
         return len(df)
 
     # ---------------------------------------------------------------- 主数据
@@ -120,13 +152,18 @@ class DuckDBStore:
         sel = ", ".join(["ts", "symbol"] + fields)
         where = "ts BETWEEN ? AND ?"
         args: list = [start, end]
-        if symbols:
-            self.con.register("_sym", pd.DataFrame({"symbol": list(symbols)}))
-            where += " AND symbol IN (SELECT symbol FROM _sym)"
-        df = self.query_df(
-            f"SELECT {sel} FROM daily_bar WHERE {where} ORDER BY ts, symbol", args)
-        if symbols:
-            self.con.unregister("_sym")
+        with self._lock:
+            cur = self.con.cursor()
+            try:
+                if symbols:
+                    cur.register("_sym", pd.DataFrame({"symbol": list(symbols)}))
+                    where += " AND symbol IN (SELECT symbol FROM _sym)"
+                df = cur.execute(
+                    f"SELECT {sel} FROM daily_bar WHERE {where} ORDER BY ts, symbol", args).fetchdf()
+            finally:
+                if symbols:
+                    cur.unregister("_sym")
+                cur.close()
         if with_adj and "close" in df and "adj_factor" in df:
             for f in ("open", "high", "low", "close", "pre_close"):
                 if f in df:
@@ -139,20 +176,23 @@ class DuckDBStore:
         if field.startswith("adj_"):
             col, expr = "adjv", f"({field[4:]} * adj_factor)"
         filt = f"ts BETWEEN DATE '{_iso(start)}' AND DATE '{_iso(end)}'"
-        if symbols:
-            self.con.register("_sym", pd.DataFrame({"symbol": list(symbols)}))
-            filt += " AND symbol IN (SELECT symbol FROM _sym)"
-        self.execute("DROP VIEW IF EXISTS _p")
-        # DDL 不支持 prepared 参数，日期在此处按 date 类型校验后内联（不接受字符串入参）
-        self.execute(
-            f"CREATE TEMP VIEW _p AS SELECT ts, symbol, {expr} AS {col} "
-            f"FROM daily_bar WHERE {filt}")
-        try:
-            df = self.query_df(f"PIVOT _p ON symbol USING any_value({col}) GROUP BY ts")
-        finally:
-            self.execute("DROP VIEW IF EXISTS _p")
-        if symbols:
-            self.con.unregister("_sym")
+        with self._lock:
+            cur = self.con.cursor()
+            try:
+                if symbols:
+                    cur.register("_sym", pd.DataFrame({"symbol": list(symbols)}))
+                    filt += " AND symbol IN (SELECT symbol FROM _sym)"
+                cur.execute("DROP VIEW IF EXISTS _p")
+            # DDL 不支持 prepared 参数，日期在此处按 date 类型校验后内联（不接受字符串入参）
+                cur.execute(f"CREATE TEMP VIEW _p AS SELECT ts, symbol, {expr} AS {col} "
+                            f"FROM daily_bar WHERE {filt}")
+                df = cur.execute(
+                    f"PIVOT _p ON symbol USING any_value({col}) GROUP BY ts").fetchdf()
+                cur.execute("DROP VIEW IF EXISTS _p")
+            finally:
+                if symbols:
+                    cur.unregister("_sym")
+                cur.close()
         df["ts"] = pd.to_datetime(df["ts"]).dt.date
         return df.set_index("ts").sort_index().sort_index(axis=1)
 
@@ -199,6 +239,17 @@ class DuckDBStore:
         long["factor_id"] = factor_id
         long = long[long["value"].notna()]
         return self._upsert("factor_value", long[["ts", "symbol", "factor_id", "value"]])
+
+    def upsert_factor_eval(self, factor_id: str, window: str, res: dict) -> int:
+        import json as _json
+        row = {"factor_id": factor_id, "eval_window": window,
+               "ic_mean": res.get("ic_mean"), "ic_std": res.get("ic_std"),
+               "icir": res.get("icir"), "t_stat": res.get("t_stat"),
+               "ic_pos_ratio": res.get("ic_pos_ratio"),
+               "quantile_returns": _json.dumps(res.get("quantile_annualized")),
+               "max_corr": (res.get("max_corr") or {}).get("value"),
+               "calc_at": datetime.now()}
+        return self._upsert("factor_eval_snapshot", pd.DataFrame([row]))
 
     def read_factor(self, factor_id: str, start: date | None = None,
                     end: date | None = None) -> pd.DataFrame:

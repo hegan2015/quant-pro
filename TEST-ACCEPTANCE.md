@@ -446,6 +446,26 @@ curl -s -H "Authorization: Bearer $(cat ~/.config/quant-pro/dev_token)" \
 
 ---
 
+## 11.2 P2 验收实况（2026-11-20 晚）
+
+| 项 | 结果 | 证据 |
+|---|---|---|
+| P2 内核用例（风控/信号/模拟盘） | 8 passed | `tests/test_p2.py` |
+| API 门禁用例（401/403/422/注入/发布流/结算流） | 6 passed | `tests/test_api.py` |
+| 全量回归（含跨进程可复现） | 79 passed（单独跑、无并发占库时） | `pytest tests -q` |
+| 控制台浏览器实测 | **通过**：11 张截图、控制台 0 error | `scripts/ui_smoke.py` → `data/reports/ui/*.png` |
+| 真实数据 P2 全链路 | 信号 draft→publish（422 拦截真实阻断项）→ 开户 → 结算 30 笔成交 → 对账 0bp → 流水 30 行 → 重放副本原账户零写入 | HTTP 实测记录 |
+| 一键 P2 验收 | `bash scripts/verify_p2.sh` | 内核+API 用例 + 浏览器实测 |
+
+浏览器实测覆盖：登录、总览、数据、研究、回测、信号（生成→勾选确认→发布）、
+模拟盘（开户→结算→对账页）、风控、系统；菜单为两级分组 + SVG 图标 + 选中指示条。
+
+**并发口径（重要）**：DuckDB 同进程同文件只允许一个连接，故 API 进程内单连接 +
+每操作独立 cursor + 进程级 RLock 串行化。**验收脚本与 pytest 不得同时跑**（会抢写锁，
+表现为 data-correctness 用例 skip 或 ResourceInUse），`verify.sh` 与 `verify_p2.sh` 需顺序执行。
+
+---
+
 ## 12 已知限制声明（随交付给出）
 
 1. 免费数据源下 PIT 财务可能缺公告日 → 财务类因子存在时点不确定，报告需标黄（A-02）。

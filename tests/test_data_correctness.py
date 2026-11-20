@@ -109,14 +109,13 @@ def test_ic_matches_sql_rank_correlation(store, panels):
     sym_list = list(f.columns)
     pair = pd.DataFrame({"f": f.loc[ts].dropna(), "r": fwd.loc[ts].dropna()}).dropna()
     pair.insert(0, "symbol", pair.index)
-    store.con.register("_icpair", pair)
     # Spearman 的并列值取平均秩：avg_rank = min_rank + (组内个数 - 1) / 2
-    sql_ic = store.scalar(
-        """SELECT corr(rf, rr) FROM (
+    # 注册与查询必须在同一 cursor（父连接注册对 cursor 不可见）
+    sql_ic = float(store.query_df_with("_icpair", pair,
+        """SELECT corr(rf, rr) AS c FROM (
              SELECT rank() OVER (ORDER BY f) + (count(*) OVER (PARTITION BY f) - 1) / 2.0 rf,
                     rank() OVER (ORDER BY r) + (count(*) OVER (PARTITION BY r) - 1) / 2.0 rr
-             FROM _icpair)""")
-    store.con.unregister("_icpair")
+             FROM _icpair)""")["c"].iloc[0])
     assert float(sql_ic) == pytest.approx(float(ics.loc[ts]), abs=1e-9), \
         "SQL 平均秩相关必须与向量化 IC 逐值一致（并列值处理是常见缺陷点）"
 

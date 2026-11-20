@@ -50,10 +50,28 @@ bash scripts/verify.sh --fast          # 跳过成本敏感性（快 3 倍）
 | 绩效与归因 + 离线报告 | `core/performance/`（`quant backtest`） | 单文件 HTML（内联 SVG，无 CDN）+ JSON + CSV |
 | 高保真视觉稿 | `prototype/pages/*.html`（`prototype/shoot.py` 出图） | 20 页可点击，数字为演示占位 |
 
-## 尚未实现（P2/P3，不要当作可用）
+## P2 服务化（已实现，运行态）
 
-FastAPI 服务与控制台页面、每日信号发布流、模拟盘账户与逐日对账、风控规则引擎界面、
-LLM 研究台与沙箱、TimescaleDB 主存、调度与告警。
+```bash
+bash scripts/serve.sh        # API :8102 + 控制台 :8101（令牌见 ~/.config/quant-pro/auth.json）
+bash scripts/verify_p2.sh    # P2 验收：内核用例 + API 门禁 + 浏览器实测
+```
+
+- **API**：FastAPI，`/api/**` 全量 Bearer 门禁（仅 `/healthz` 例外），RBAC 五角色；
+  覆盖状态/行情/质量/修正/作业/因子/回测/信号/模拟盘/风控全部运营能力。
+- **控制台**：Vue 3 全局构建 + Element Plus **本地 vendored**（`app/console/vendor/`，
+  离线可用、无 npm 构建步骤）；8 页接真接口：总览、数据、研究、回测、信号、模拟盘、风控、系统。
+  与 UI-DESIGN 的 Vite 构建方案相比改为免构建 vendored，版式与令牌沿用同一套 `tokens.css`。
+- **信号流**：draft → publish（四项前置校验 + 勾选确认）→ withdrawn/superseded；
+  校验不过返回 422 + 原因清单，状态停留 draft。
+- **模拟盘**：与回测同撮合内核；订单幂等键、流水只追加按 ref 去重；
+  对账从落库产物独立重算（不读引擎内部账本）；重放生成独立副本、原账户零写入。
+- **风控**：7 条内置规则；熔断只拒新增买入；事件需 role:risk 人工 ack 才解除。
+
+## 尚未实现（P3，不要当作可用）
+
+LLM 研究台与沙箱、TimescaleDB 主存切换、分布式调度与告警、Brinson 归因（需基准成分权重）、
+双源比对（同花顺）自动化用例。
 
 ## 口径要点（结论可信度依赖这些）
 

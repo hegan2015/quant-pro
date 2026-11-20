@@ -305,3 +305,13 @@ CREATE TABLE IF NOT EXISTS paper_ledger (
 
 CREATE INDEX IF NOT EXISTS idx_risk_event_status ON risk_event(status);
 CREATE INDEX IF NOT EXISTS idx_signal_date ON signal_run(trade_date);
+
+CREATE TABLE IF NOT EXISTS factor_eval_snapshot (
+    factor_id VARCHAR, eval_window VARCHAR, ic_mean DOUBLE, ic_std DOUBLE, icir DOUBLE,
+    t_stat DOUBLE, ic_pos_ratio DOUBLE, quantile_returns VARCHAR, max_corr DOUBLE,
+    calc_at TIMESTAMP, PRIMARY KEY (factor_id, eval_window)
+);
+
+CREATE TABLE IF NOT EXISTS app_config (
+    key VARCHAR PRIMARY KEY, value VARCHAR, updated_at TIMESTAMP, updated_by VARCHAR
+);

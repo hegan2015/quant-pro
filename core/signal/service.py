@@ -107,7 +107,12 @@ def precheck(store: DuckDBStore, trade_date: date, weights: dict[str, float],
     cov = store.query_df(
         "SELECT count(*) n FROM daily_bar WHERE ts = ? AND is_final", [trade_date])
     n_final = int(cov["n"].iloc[0]) if not cov.empty else 0
-    n_uni = len(store.universe(trade_date))
+    # 分母用「活跃集」：近 120 交易日有过行情的标的。
+    # 主数据含未回填 delist_date 的僵尸退市标的（待拍板回填），用全量主数据做分母会误报覆盖不足。
+    act = store.query_df(
+        "SELECT count(DISTINCT symbol) n FROM daily_bar WHERE ts <= ? AND ts >= ?",
+        [trade_date, trade_date - timedelta(days=180)])
+    n_uni = int(act["n"].iloc[0]) if not act.empty else 0
     ratio = n_final / max(n_uni, 1)
     # 新鲜度 = 该信号日数据终态覆盖达标，且信号日不晚于最新交易日（不得发未来信号）；
     # 不要求「信号日==最新日」，否则历史信号无法发布、模拟盘无法结算历史区间
