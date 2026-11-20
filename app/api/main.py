@@ -32,6 +32,19 @@ app.add_middleware(
 )
 
 
+@app.on_event("startup")
+def seed_reference_data() -> None:
+    """启动即幂等初始化参考数据：内置风控规则 + 因子元数据。
+
+    否则新库首次打开控制台时「风控规则」「因子库」是空表，看起来像没有数据。
+    """
+    from core.risk.engine import ensure_rules
+    from core.factor.registry import meta_frame
+    st = store()
+    ensure_rules(st)
+    st.upsert_factor_meta(meta_frame())
+
+
 _STORE: DuckDBStore | None = None
 
 
@@ -253,12 +266,6 @@ def backtest_report(run_id: str, p=Depends(auth.principal)):
     return FileResponse(path, media_type="text/html")
 
 
-# 控制台静态资源同源提供：ops 运维台只需一个端口（8102）即可打开界面
-CONSOLE_DIR = settings.ROOT / "app" / "console"
-if CONSOLE_DIR.is_dir():
-    app.mount("/", StaticFiles(directory=str(CONSOLE_DIR), html=True), name="console")
-
-
 class SignalReq(BaseModel):
     strategy_id: str = "s2_multifactor"
     params: dict = {}
@@ -427,3 +434,12 @@ def breaker(p=Depends(auth.principal)):
     st = store()
     return {"open": risk.circuit_breaker_open(st),
             "open_events": _df(st.list_risk_events(status="open"))}
+
+
+# ---------------------------------------------------------------------------
+# 控制台静态资源同源提供（ops 运维台单端口即可打开界面）。
+# 必须挂在所有 /api 路由之后：Starlette 按注册顺序匹配，挂载 "/" 在前会
+# 把后定义的路由全部遮蔽成 404（曾因此导致信号/模拟盘/风控页「没有数据」）。
+CONSOLE_DIR = settings.ROOT / "app" / "console"
+if CONSOLE_DIR.is_dir():
+    app.mount("/", StaticFiles(directory=str(CONSOLE_DIR), html=True), name="console")

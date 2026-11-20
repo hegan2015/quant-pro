@@ -30,6 +30,23 @@ def client(tmp_path, monkeypatch):
     return c, db, tok
 
 
+def test_static_mount_does_not_shadow_api_routes(client):
+    """回归防护：控制台静态资源挂在 "/"，若注册顺序在路由之前会把 /api 全部遮蔽成 404。
+
+    曾因此导致信号 / 模拟盘 / 风控页「没有初始化数据」。
+    """
+    from app.api.main import app
+    c, db, tok = client
+    kinds = [getattr(r, "path", None) for r in app.routes]
+    mount_idx = next(i for i, r in enumerate(app.routes)
+                     if type(r).__name__ == "Mount")
+    api_after = [r.path for r in app.routes[mount_idx + 1:] if getattr(r, "path", "").startswith("/api")]
+    assert not api_after, f"这些 /api 路由定义在静态挂载之后，会被遮蔽：{api_after}"
+    for path in ("/api/signals", "/api/paper/accounts", "/api/risk/rules",
+                 "/api/risk/events", "/api/risk/breaker", "/api/factors"):
+        assert c.get(path).status_code == 200, f"{path} 被静态挂载吞掉（404）"
+
+
 def test_healthz_open_and_api_gated(client):
     c, db, tok = client
     assert c.get("/healthz").status_code == 200

@@ -528,6 +528,11 @@ FAIL 的策略不允许进入 P2 信号发布与模拟盘（引擎层强制，�
 
 ## 15 REST API（前缀 `/api`，全部需 Bearer）
 
+> 实现约束：控制台静态资源挂在 `/`，**必须在所有 `/api` 路由注册之后**再 `app.mount("/")`——
+> Starlette 按注册顺序匹配，挂载在前会把后定义的路由全部吞成 404（曾导致信号/模拟盘/风控页
+> 显示「没有数据」）。已由 `tests/test_api.py::test_static_mount_does_not_shadow_api_routes` 固化。
+> 参考数据（内置风控规则、因子元数据）在应用 startup 时幂等 seed，避免新库首开空表。
+
 | 方法 路径 | 用途 | 关键请求/响应 | 角色 |
 |---|---|---|---|
 | `GET /healthz` | 存活（免鉴权，仅 `/healthz`） | `{status, store_mode, latest_trade_date}` | — |

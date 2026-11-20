@@ -134,7 +134,9 @@ td.dim{color:var(--text-2)}
 .tabs{display:flex;gap:var(--sp-4);border-bottom:1px solid var(--line-1);margin-bottom:var(--sp-4)}
 .tabs span{padding:6px 0;font-size:var(--fs-sm);color:var(--text-2);border-bottom:2px solid transparent}
 .tabs span.on{color:var(--brand-600);border-bottom-color:var(--brand-600);font-weight:600}
-svg{display:block;width:100%;height:auto;overflow:visible}
+svg.chart{display:block;width:100%;height:auto;overflow:visible}
+svg:not(.chart){overflow:visible}
+.nav-item svg{flex:0 0 15px;width:15px;height:15px}
 svg text{font-family:var(--font-num);font-size:10px;fill:var(--text-3)}
 svg .ax{stroke:var(--line-1);stroke-width:1}
 @media (max-width:1024px){.g4{grid-template-columns:repeat(2,minmax(0,1fr))}.g-2-1{grid-template-columns:1fr}
