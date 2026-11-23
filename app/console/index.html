@@ -5,6 +5,7 @@
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>quant-pro 控制台</title>
 <link rel="stylesheet" href="vendor/element-plus.css">
+<link rel="stylesheet" href="vendor/element-plus-dark.css">
 <link rel="stylesheet" href="assets/tokens.css">
 <link rel="stylesheet" href="assets/app.css">
 <style>
@@ -30,6 +31,14 @@
 </style>
 </head>
 <body>
+<script>
+/* 主题先于渲染落地，避免闪白；默认暗色（金融终端），亮色可切换并记忆 */
+(function () {
+  var t = localStorage.getItem("qp_theme") || "dark";
+  document.documentElement.setAttribute("data-theme", t);
+  document.documentElement.classList.toggle("dark", t === "dark");
+})();
+</script>
 <div id="app"></div>
 <script src="vendor/vue.global.prod.js"></script>
 <script src="vendor/element-plus.full.min.js"></script>

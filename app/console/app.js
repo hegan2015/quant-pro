@@ -30,32 +30,62 @@ const LineChart = {
   setup(p) {
     const svg = computed(() => {
       const W = 1000, H = p.height, pad = 40;
-      const clean = p.series.map(s => ({ ...s, values: s.values.map(Number).filter(Number.isFinite) }))
-                            .filter(s => s.values.length);
+      const clean = p.series
+        .map(x => ({ ...x, values: x.values.map(Number).filter(Number.isFinite) }))
+        .filter(x => x.values.length);
       if (!clean.length) return "";
-      const all = clean.flatMap(s => s.values);
+      const all = clean.flatMap(x => x.values);
       let lo = Math.min(...all), hi = Math.max(...all);
       const span = (hi - lo) || 1; lo -= span * .06; hi += span * .06;
-      const n = Math.max(...clean.map(s => s.values.length));
+      const n = Math.max(...clean.map(x => x.values.length));
       const X = i => pad + i * (W - pad - 12) / Math.max(n - 1, 1);
       const Y = v => H - pad - (v - lo) / (hi - lo) * (H - pad * 2);
-      let out = `<svg class="chart" viewBox="0 0 ${W} ${H}">`;
+      const colors = ["var(--chart-1)", "var(--chart-2)", "var(--chart-3)", "var(--chart-4)"];
+      const parts = [`<svg class="chart" viewBox="0 0 ${W} ${H}" role="img" aria-label="净值曲线">`];
+      parts.push(`<defs><linearGradient id="navfill" x1="0" y1="0" x2="0" y2="1">`
+        + `<stop offset="0%" stop-color="${colors[0]}" stop-opacity="0.22"/>`
+        + `<stop offset="100%" stop-color="${colors[0]}" stop-opacity="0"/></linearGradient></defs>`);
       for (let k = 0; k < 5; k++) {
         const y = pad + k * (H - pad * 2) / 4, v = hi - k * (hi - lo) / 4;
-        out += `<line x1="${pad}" y1="${y}" x2="${W - 12}" y2="${y}" stroke="#E3E7ED" stroke-dasharray="3 3"/>`;
-        out += `<text x="2" y="${y + 3}">${v.toFixed(3)}</text>`;
+        parts.push(`<line x1="${pad}" y1="${y.toFixed(1)}" x2="${W - 12}" y2="${y.toFixed(1)}"`
+          + ` stroke="var(--line-1)"${k ? ' stroke-dasharray="3 3"' : ' stroke-width="1.2"'}/>`);
+        parts.push(`<text x="2" y="${(y + 3).toFixed(1)}">${v.toFixed(3)}</text>`);
       }
-      const colors = ["#0F4C81", "#B26A00", "#2F8540", "#B33771"];
-      clean.forEach((s, j) => {
-        const pts = s.values.map((v, i) => `${X(i).toFixed(1)},${Y(v).toFixed(1)}`).join(" ");
-        out += `<polyline fill="none" stroke="${colors[j % 4]}" stroke-width="1.8" points="${pts}"${s.dash ? ' stroke-dasharray="5 4"' : ""}/>`;
+      const base = Y(Math.max(lo, 0));
+      parts.push(`<polygon fill="url(#navfill)" points="${pad},${base.toFixed(1)} `
+        + clean[0].values.map((v, i) => `${X(i).toFixed(1)},${Y(v).toFixed(1)}`).join(" ")
+        + ` ${X(clean[0].values.length - 1).toFixed(1)},${base.toFixed(1)}"/>`);
+      clean.forEach((x, j) => {
+        const pts = x.values.map((v, i) => `${X(i).toFixed(1)},${Y(v).toFixed(1)}`).join(" ");
+        parts.push(`<polyline fill="none" stroke="${colors[j % 4]}" stroke-width="1.8"`
+          + ` points="${pts}"${x.dash ? ' stroke-dasharray="5 4"' : ""}/>`);
       });
-      (p.labels || []).forEach((t, i) => {
-        if (t) out += `<text x="${X(i * Math.max(1, Math.floor(n / 8))) - 20}" y="${H - pad + 14}">${t}</text>`;
-      });
-      return out + "</svg>";
+      const step = Math.max(1, Math.floor(n / 8));
+      for (let i = 0; i < n; i += step) {
+        const t = (p.labels && p.labels[i]) || "";
+        if (t) parts.push(`<text x="${(X(i) - 22).toFixed(1)}" y="${H - pad + 15}">${t}</text>`);
+      }
+      parts.push("</svg>");
+      const legend = clean.map((x, i) =>
+        `<span><i style="background:${colors[i % 4]}"></i>${x.name}</span>`).join("");
+      return `<div class="legend">${legend}</div>` + parts.join("");
     });
     return () => h("div", { innerHTML: svg.value });
+  },
+};
+
+/* 迷你走势线：KPI 卡右下角，用同一份净值序列，不额外请求 */
+const Spark = {
+  props: { values: Array, color: { default: "var(--chart-1)" } },
+  setup(p) {
+    const d = computed(() => {
+      const v = (p.values || []).map(Number).filter(Number.isFinite);
+      if (v.length < 2) return "";
+      const W = 92, H = 30, lo = Math.min(...v), hi = Math.max(...v), sp = (hi - lo) || 1;
+      return v.map((x, i) => `${(i * W / (v.length - 1)).toFixed(1)},${(H - (x - lo) / sp * H).toFixed(1)}`).join(" ");
+    });
+    return () => h("svg", { class: "spark", viewBox: "0 0 92 30", "aria-hidden": "true" },
+      [h("polyline", { fill: "none", stroke: p.color, "stroke-width": 1.4, points: d.value })]);
   },
 };
 
@@ -83,24 +113,40 @@ const Login = {
 };
 
 const Dashboard = {
-  components: { LineChart },
+  components: { LineChart, Spark },
   setup() {
     const st = ref(null), eq = ref([]), run = ref(null), err = ref("");
+    const loading = ref(true);   // 区分「加载中」与「真的没有数据」，避免空态误导
     onMounted(async () => {
       try {
         st.value = await api("/api/status");
         const runs = await api("/api/backtests?limit=1");
         if (runs.length) {
-          run.value = runs[0];
+          run.value = await api("/api/backtests/" + runs[0].run_id);
           eq.value = await api(`/api/backtests/${runs[0].run_id}/equity`);
         }
       } catch (e) { err.value = e.message; }
+      finally { loading.value = false; }
     });
-    const series = computed(() => eq.value.length ? [
-      { name: "组合净值", values: eq.value.map(x => x.nav) },
-      { name: "基准", values: eq.value.map(x => x.benchmark_nav), dash: true }] : []);
+    const series = computed(() => {
+      if (!eq.value.length) return [];
+      const out = [{ name: "本组合", values: eq.value.map(x => x.nav) }];
+      const bench = eq.value.map(x => x.benchmark_nav);
+      if (bench.some(v => Number.isFinite(v))) {
+        out.push({ name: "基准 " + (eq.value[0].benchmark_name || "000300"),
+                   values: bench, dash: true });
+      }
+      return out;
+    });
     const labels = computed(() => eq.value.map((x, i) => i % 60 === 0 ? String(x.ts).slice(0, 7) : ""));
-    return { st, eq, run, err, series, labels, fmtPct, fmtNum };
+    const navLast = computed(() => eq.value.length ? Number(eq.value[eq.value.length - 1].nav) : 1);
+    // /api/backtests/{id} 的 metrics 是 {full,in,oos,sensitivity} 包装，取 full 展示
+    const metrics = computed(() => {
+      const m = run.value && run.value.metrics;
+      const full = m && (m.full || (m.收益 ? m : null));
+      return full && full.收益 ? full : null;
+    });
+    return { st, eq, run, err, loading, series, labels, navLast, metrics, fmtPct, fmtNum };
   },
   template: `
   <div>
@@ -108,16 +154,42 @@ const Dashboard = {
     <el-alert v-if="st && st.breaker_open" type="error" :closable="false" style="margin-bottom:16px"
       title="熔断进行中：仅拒绝新增买入，不强平已有持仓（需 role:risk 人工解除）"/>
     <div class="kpi-grid" v-if="st">
-      <el-card><div class="sub">最新交易日</div><div class="num" style="font-size:20px">{{st.latest_trade_date}}</div></el-card>
-      <el-card><div class="sub">行情行数</div><div class="num" style="font-size:20px">{{st.bars.toLocaleString()}}</div></el-card>
-      <el-card><div class="sub">未确认风控事件</div><div class="num neg" style="font-size:20px">{{st.open_risk_events}}</div></el-card>
-      <el-card><div class="sub">模拟盘账户</div><div class="num" style="font-size:20px">{{st.accounts}}</div></el-card>
+      <div class="kpi">
+        <div class="label">组合净值（期末）</div>
+        <div class="value" :class="navLast >= 1 ? 'up' : 'down'">{{navLast.toFixed(4)}}</div>
+        <div class="delta" :class="navLast - 1 >= 0 ? 'up' : 'down'">
+          {{((navLast - 1) * 100).toFixed(2)}}%{{navLast - 1 >= 0 ? ' ▲' : ' ▼'}} 累计
+        </div>
+        <spark :values="eq.map(x => x.nav)"/>
+      </div>
+      <div class="kpi">
+        <div class="label">年化收益 / Sharpe</div>
+        <div class="value sm num">{{metrics ? fmtPct(metrics.收益.年化收益) : '—'}}</div>
+        <div class="delta" v-if="metrics">
+          <span class="mono-sm">Sharpe {{metrics.比值.Sharpe ?? '—'}} · 回撤 {{fmtPct(metrics.风险.max_drawdown)}}</span>
+        </div>
+        <div class="delta" v-else><span class="mono-sm">暂无回测记录</span></div>
+      </div>
+      <div class="kpi">
+        <div class="label">行情水位</div>
+        <div class="value sm num">{{st.latest_trade_date}}</div>
+        <div class="delta"><span class="mono-sm">{{st.bars.toLocaleString()}} 行 · dv {{st.data_version}}</span></div>
+      </div>
+      <div class="kpi">
+        <div class="label">风控 / 模拟盘</div>
+        <div class="value sm num" :class="st.open_risk_events ? 'neg' : ''">{{st.open_risk_events}}<span class="sub"> 未确认事件</span></div>
+        <div class="delta"><span class="mono-sm">{{st.accounts}} 个账户{{st.breaker_open ? ' · 熔断中' : ''}}</span></div>
+      </div>
     </div>
     <el-card style="margin-top:16px" v-if="run">
       <div class="card-h"><h2>最近回测 {{run.run_id}}（{{run.strategy_id}}）</h2>
         <span class="sub">门禁 {{run.lookahead_status}} · 体检见回测页</span></div>
       <line-chart :series="series" :labels="labels"/>
     </el-card>
+    <div v-else-if="loading" class="card">
+      <div class="mono-sm">正在读取最近回测…</div>
+      <div class="skeleton" style="height:220px;margin-top:10px"></div>
+    </div>
     <el-empty v-else description="尚无回测记录，去回测页发起"/>
   </div>`,
 };
@@ -379,8 +451,12 @@ const Paper = {
     const dlg = ref(false), st = ref(false), rp = ref(false), busy = ref(false);
     const form = reactive({ name: "demo", start_date: "2016-01-04", initial_capital: 10000000 });
     const upto = ref(""); const from = ref("");
-    async function loadAccounts() { accounts.value = await api("/api/paper/accounts");
-      if (!aid.value && accounts.value.length) aid.value = accounts.value[0].account_id; }
+    async function loadAccounts() {
+      const list = await api("/api/paper/accounts");
+      // 默认选「最近创建」的账户：早期演示账户没有结算数据，直接选中会显示空表
+      accounts.value = [...list].sort((a, b) => String(b.created_at).localeCompare(String(a.created_at)));
+      if (!aid.value && accounts.value.length) aid.value = accounts.value[0].account_id;
+    }
     async function loadAll() {
       if (!aid.value) return;
       [pos.value, orders.value, eq.value, recon.value, led.value] = await Promise.all([
@@ -593,26 +669,57 @@ const Root = {
   setup() {
     const page = ref(location.hash.replace("#/", "") || "dashboard");
     const st = ref(null);
+    const idx = ref([]);
+    const theme = ref(localStorage.getItem("qp_theme") || "dark");
+    const clock = ref(new Date().toLocaleTimeString("zh-CN", { hour12: false }));
+    function applyTheme(t) {
+      theme.value = t;
+      localStorage.setItem("qp_theme", t);
+      document.documentElement.setAttribute("data-theme", t);
+      document.documentElement.classList.toggle("dark", t === "dark");
+    }
     function go(k) { location.hash = "#/" + k; }
     function onHash() { page.value = location.hash.replace("#/", "") || "dashboard"; }
     window.addEventListener("hashchange", onHash);
-    onMounted(async () => { if (token()) { try { st.value = await api("/api/status"); } catch (e) {} } });
+    async function refresh() {
+      try { st.value = await api("/api/status"); } catch (e) { st.value = null; }
+      try { idx.value = await api("/api/indices"); } catch (e) { idx.value = []; }
+    }
+    onMounted(async () => {
+      if (token()) await refresh();
+      setInterval(() => { clock.value = new Date().toLocaleTimeString("zh-CN", { hour12: false }); }, 1000);
+    });
+    watch(page, () => { if (token()) refresh(); });
     function logout() { localStorage.removeItem("qp_token"); st.value = null; go("login"); }
     const comp = computed(() => PAGES[page.value] || Dashboard);
-    return { page, go, comp, st, logout, NAV, icons: ICONS };
+    return { page, go, comp, st, idx, theme, clock, logout, NAV, icons: ICONS, applyTheme, refresh };
   },
   template: `
   <div v-if="page==='login'"><login/></div>
   <div v-else>
     <header class="qp-top">
-      <b style="color:var(--brand-600)">QUANT·PRO</b>
-      <el-tag size="small" type="danger" effect="plain">LOCAL</el-tag>
-      <span class="chip" v-if="st">最新 {{st.latest_trade_date}}</span>
-      <span class="chip" v-if="st && st.breaker_open" style="border-color:var(--err-600);color:var(--err-600)">熔断中</span>
-      <span style="flex:1"></span>
-      <span class="sub" v-if="st">{{st.user}} · {{st.roles.join('/')}}</span>
-      <el-button size="small" @click="logout">退出</el-button>
+      <span class="qp-brand">QUANT·PRO<small>量化终端</small></span>
+      <span class="chip chip-err">LOCAL</span>
+      <span class="chip chip-warn" v-if="st && st.breaker_open">熔断中 · 仅拒新增买入</span>
+      <span class="chip" v-if="st"><span class="dot dot-ok"></span>{{st.latest_trade_date}}</span>
+      <span class="spacer"></span>
+      <input class="search" placeholder="搜索 标的 / 策略 / run_id" aria-label="搜索">
+      <button class="btn" @click="applyTheme(theme === 'dark' ? 'light' : 'dark')"
+              :title="'切换主题（当前 ' + theme + '）'">{{ theme === 'dark' ? '亮色' : '暗色' }}</button>
+      <span class="mono-sm">{{clock}}</span>
+      <span class="chip" v-if="st">{{st.user}} · {{st.roles.join('/')}}</span>
+      <button class="btn" @click="logout">退出</button>
     </header>
+    <div class="ticker" v-if="idx.length" role="group" aria-label="指数行情">
+      <template v-for="(x, i) in idx" :key="x.index_code">
+        <span class="ticker-item">
+          <span class="nm">{{x.name}}</span>
+          <span class="px" :class="x.chg >= 0 ? 'up' : 'down'">{{x.close.toLocaleString(undefined,{minimumFractionDigits:2})}}</span>
+          <span class="cg" :class="x.chg >= 0 ? 'up' : 'down'">{{(x.chg >= 0 ? '+' : '') + (x.chg * 100).toFixed(2)}}%{{x.chg >= 0 ? '▲' : '▼'}}</span>
+        </span>
+        <span class="ticker-sep" v-if="i < idx.length - 1"></span>
+      </template>
+    </div>
     <div class="qp-shell">
       <nav class="qp-nav">
         <div v-for="g in NAV" :key="g[0]" class="nav-group">
@@ -627,8 +734,13 @@ const Root = {
       </nav>
       <main class="qp-main"><component :is="comp"/></main>
     </div>
-    <footer class="qp-foot">免责声明：本系统输出为量化研究结论，不构成投资建议；不连接券商实盘通道。
-      数据口径见 REQUIREMENTS §8 与 DETAILED-DESIGN §4/§6。</footer>
+    <footer class="qp-foot">
+      <span v-if="st">数据水位 <b class="wm">{{st.latest_trade_date}}</b> · {{st.bars.toLocaleString()}} 行 · dv <b class="wm">{{st.data_version}}</b></span>
+      <span v-if="st">· store {{st.store_mode || 'duckdb'}}</span>
+      <span v-if="st">· 回测 {{st.runs}} · 信号 {{st.signals}} · 账户 {{st.accounts}}</span>
+      <span class="spacer" style="flex:1"></span>
+      <span>免责声明：输出为量化研究结论，不构成投资建议；系统不连接券商实盘通道</span>
+    </footer>
   </div>`,
   components: { Login },
 };

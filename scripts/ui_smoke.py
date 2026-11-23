@@ -21,7 +21,8 @@ from playwright.sync_api import sync_playwright  # noqa: E402
 
 TOKEN = next(iter(json.loads((Path.home() / ".config" / "quant-pro" / "auth.json")
                              .read_text())["tokens"]))
-BASE = "http://127.0.0.1:8101"
+# 控制台与 API 同源（run.sh 起 :8102）；独立静态服务 8101 仍可用环境变量覆盖
+BASE = os.environ.get("QP_CONSOLE", "http://127.0.0.1:8102")
 
 
 def main() -> int:
@@ -38,6 +39,10 @@ def main() -> int:
         page.fill("input[placeholder='qp-...']", TOKEN)
         page.click("button:has-text('登录')")
         page.wait_for_selector(".qp-top", timeout=15000)
+        # 断言总览真的渲染出净值图（曾经加载态被误显示为「尚无回测记录」）
+        page.wait_for_selector("svg.chart", timeout=30000)
+        assert "尚无回测记录" not in page.inner_text("main"), "总览把加载中空当成无数据"
+        page.wait_for_timeout(800)
         page.screenshot(path=str(OUT / "01-dashboard.png"))
         shots.append("01-dashboard")
 
@@ -94,6 +99,18 @@ def main() -> int:
         page.wait_for_timeout(1200)
         page.screenshot(path=str(OUT / "11-paper-recon.png"))
         shots.append("11-paper-recon")
+
+        # 亮色主题：切换后必须仍渲染数据且无报错（主题不是装饰，两档都要可用）
+        page.click("button[title^='切换主题']")
+        page.wait_for_timeout(600)
+        assert page.evaluate("document.documentElement.dataset.theme") == "light"
+        page.goto(BASE + "/#/dashboard")
+        page.wait_for_selector("svg.chart", timeout=30000)
+        page.wait_for_timeout(800)
+        page.screenshot(path=str(OUT / "12-dashboard-light.png"))
+        shots.append("12-dashboard-light")
+        page.click("button[title^='切换主题']")   # 还原默认暗色
+        page.wait_for_timeout(400)
 
         browser.close()
 

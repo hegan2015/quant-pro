@@ -89,10 +89,37 @@ def healthz():
             "bars": st.bar_count()}
 
 
+@app.get("/api/indices")
+def indices(p=Depends(auth.principal)):
+    """指数快照：最新点位 + 日涨跌（用最近两个有行情的交易日），供顶栏行情条。"""
+    st = store()
+    end = st.latest_trade_date()
+    start = end.replace(year=end.year - 1) if end else None
+    if start is None:
+        return []
+    rows = st.query(
+        "SELECT index_code, ts, close FROM index_bar WHERE ts BETWEEN ? AND ?"
+        " ORDER BY index_code, ts", [start, end])
+    by: dict[str, list] = {}
+    for code, ts, close in rows:
+        by.setdefault(code, []).append((ts, float(close)))
+    names = {"000300": "沪深300", "000905": "中证500", "000852": "中证1000",
+             "000001": "上证指数", "399006": "创业板指", "399001": "深证成指"}
+    out = []
+    for code, series in sorted(by.items()):
+        last = series[-1]
+        prev = series[-2][1] if len(series) > 1 else last[1]
+        out.append({"index_code": code, "name": names.get(code, code),
+                    "ts": str(last[0]), "close": round(last[1], 2),
+                    "chg": round(last[1] / prev - 1.0, 6) if prev else 0.0})
+    return out
+
+
 @app.get("/api/status")
 def status(p=Depends(auth.principal)):
     st = store()
     return {"latest_trade_date": str(st.latest_trade_date()), "bars": st.bar_count(),
+            "store_mode": "duckdb（进程内）",
             "instruments": int(st.scalar("SELECT count(*) FROM instrument")),
             "factors": int(st.scalar("SELECT count(*) FROM factor_value")),
             "runs": int(st.scalar("SELECT count(*) FROM backtest_run")),
@@ -100,6 +127,8 @@ def status(p=Depends(auth.principal)):
             "accounts": int(st.scalar("SELECT count(*) FROM paper_account")),
             "open_risk_events": int(st.scalar(
                 "SELECT count(*) FROM risk_event WHERE status='open'")),
+            "data_version": st.data_version(date(2016, 1, 4), st.latest_trade_date())
+            if st.bar_count() else None,
             "breaker_open": risk.circuit_breaker_open(st),
             "user": p["user"], "roles": p["roles"]}
 
@@ -244,7 +273,22 @@ def get_backtest(run_id: str, p=Depends(auth.principal)):
 
 @app.get("/api/backtests/{run_id}/equity")
 def backtest_equity(run_id: str, p=Depends(auth.principal)):
-    return _df(store().load_equity(run_id))
+    """净值序列 + 基准净值：benchmark_nav 不落库，按该 run 的基准指数即时重算。"""
+    st = store()
+    df = st.load_equity(run_id)
+    if df.empty:
+        return []
+    code = st.get_run(run_id).get("benchmark") or "000300"
+    rows = st.query(
+        "SELECT ts, close FROM index_bar WHERE index_code = ? AND ts BETWEEN ? AND ?"
+        " ORDER BY ts", [code, df.ts.min(), df.ts.max()])
+    if rows:
+        idx = pd.Series([r[1] for r in rows],
+                        index=[r[0].date() if hasattr(r[0], "date") else r[0] for r in rows])
+        bnav = (1.0 + idx.pct_change().fillna(0.0)).cumprod()
+        df["benchmark_nav"] = bnav.reindex(df.ts).ffill().bfill().to_numpy()
+        df["benchmark_name"] = code
+    return _df(df)
 
 
 @app.get("/api/backtests/{run_id}/orders")
