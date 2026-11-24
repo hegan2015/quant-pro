@@ -7,3 +7,5 @@ __pycache__/
 tests/fixtures/http/
 config/settings.json
 .DS_Store
+# IDE 本地窗口状态：每次切页签都会脏一次，其余 .idea 配置（misc/modules/iml/vcs）保留
+.idea/workspace.xml
