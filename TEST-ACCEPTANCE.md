@@ -451,8 +451,8 @@ curl -s -H "Authorization: Bearer $(cat ~/.config/quant-pro/dev_token)" \
 | 项 | 结果 | 证据 |
 |---|---|---|
 | P2 内核用例（风控/信号/模拟盘） | 8 passed | `tests/test_p2.py` |
-| API 门禁用例（401/403/422/注入/发布流/结算流） | 6 passed | `tests/test_api.py` |
-| 全量回归（含跨进程可复现） | 79 passed（单独跑、无并发占库时） | `pytest tests -q` |
+| API 门禁用例（401/403/422/注入/发布流/结算流/标的名称映射） | 8 passed | `tests/test_api.py` |
+| 全量回归（含跨进程可复现） | 81 passed（单独跑、无并发占库时） | `pytest tests -q` |
 | 控制台浏览器实测 | **通过**：11 张截图、控制台 0 error | `scripts/ui_smoke.py` → `data/reports/ui/*.png` |
 | 真实数据 P2 全链路 | 信号 draft→publish（422 拦截真实阻断项）→ 开户 → 结算 30 笔成交 → 对账 0bp → 流水 30 行 → 重放副本原账户零写入 | HTTP 实测记录 |
 | 一键 P2 验收 | `bash scripts/verify_p2.sh` | 内核+API 用例 + 浏览器实测 |

@@ -21,6 +21,13 @@ h1, h2, h3 { margin: 0; font-weight: 650; letter-spacing: .2px; }
 .down { color: var(--market-down); }
 .flat { color: var(--market-flat); }
 .neg { color: var(--err-600); }
+/* 标的单元格：代码（等宽）+ 中文名，名称缺省时只留代码 */
+.sym-cell { display: inline-flex; align-items: baseline; gap: 6px; min-width: 0; }
+.sym-cell .code { font-family: var(--font-num); font-size: var(--fs-sm); font-weight: 500; }
+.sym-cell .nm {
+  color: var(--text-2); font-size: var(--fs-xs);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
 .mono-sm { font-family: var(--font-num); font-size: var(--fs-xs); color: var(--text-2); }
 .sub { font-size: var(--fs-xs); color: var(--text-3); }
 .hint { font-size: var(--fs-xs); color: var(--text-3); margin-top: var(--sp-2); }
@@ -56,6 +63,7 @@ h1, h2, h3 { margin: 0; font-weight: 650; letter-spacing: .2px; }
 /* ---------------------------------------------------------------- 指数行情条 */
 .ticker {
   display: flex; align-items: center; gap: var(--sp-4);
+  position: sticky; top: 47px; z-index: 99;
   height: 34px; padding: 0 var(--sp-4); overflow-x: auto;
   background: var(--bg-inset); border-bottom: 1px solid var(--line-1);
   scrollbar-width: none;
@@ -68,12 +76,14 @@ h1, h2, h3 { margin: 0; font-weight: 650; letter-spacing: .2px; }
 .ticker-sep { width: 1px; height: 14px; background: var(--line-1); }
 
 /* ---------------------------------------------------------------- 骨架 */
-/* 顶栏 46 + 行情条 34 + 状态栏 28：不足一屏也要把状态栏留在视口内 */
-.qp-shell { display: flex; min-height: calc(100vh - 108px); }
+/* 状态栏固定在视口底部：整页做成 flex 列，内容不足一屏时由 shell 撑开，
+   超过一屏时正常滚动。不用 calc(100vh - 魔数)，头部高度会变（行情条可换行）。 */
+.qp-app { display: flex; flex-direction: column; min-height: 100vh; }
+.qp-shell { display: flex; flex: 1 1 auto; min-height: 0; }
 .qp-nav {
   width: 208px; flex: 0 0 208px; padding: var(--sp-3) 0 var(--sp-5);
   background: var(--bg-1); border-right: 1px solid var(--line-1);
-  position: sticky; top: 80px; align-self: flex-start; max-height: calc(100vh - 80px);
+  position: sticky; top: 82px; align-self: flex-start; max-height: calc(100vh - 82px);
   overflow-y: auto;
 }
 .nav-group { margin-bottom: var(--sp-4); }

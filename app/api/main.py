@@ -140,6 +140,16 @@ def instruments(as_of: str | None = None, p=Depends(auth.principal)):
     return _df(st.universe(d))
 
 
+@app.get("/api/instruments/names")
+def instrument_names(p=Depends(auth.principal)) -> dict[str, str]:
+    """symbol→中文名映射，供控制台各表的标的列共用。
+
+    比每张表各自 JOIN instrument 便宜：全量约 5.9k 条、120KB，前端登录后取一次。
+    """
+    df = store().instruments()
+    return dict(zip(df["symbol"], df["name"].fillna("")))
+
+
 @app.get("/api/bars")
 def bars(start: str, end: str, symbol: str | None = None, limit: int = 500,
          p=Depends(auth.principal)):

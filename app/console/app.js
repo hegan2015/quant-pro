@@ -24,6 +24,25 @@ const fmtPct = v => v == null ? "—" : (v * 100).toFixed(2) + "%";
 const fmtNum = (v, d = 2) => v == null ? "—" : Number(v).toFixed(d);
 const cls = v => v > 0 ? "up" : v < 0 ? "down" : "";
 
+/* ---------------------------------------------------------------- 标的中文名 */
+// 一次请求换回全量 symbol→名称（约 120KB），各表共享；未命中（早期退市/名称缺失）只显示代码。
+const SYM_NAMES = ref({});
+async function loadNames() {
+  if (Object.keys(SYM_NAMES.value).length) return;
+  try { SYM_NAMES.value = await api("/api/instruments/names"); } catch (e) { /* 名称缺失不影响数据 */ }
+}
+const symName = s => SYM_NAMES.value[s] || "";
+
+const SymCell = {
+  props: { symbol: String },
+  setup(p) {
+    return () => h("span", { class: "sym-cell", title: p.symbol }, [
+      h("b", { class: "code" }, p.symbol || "—"),
+      symName(p.symbol) ? h("small", { class: "nm" }, symName(p.symbol)) : null,
+    ]);
+  },
+};
+
 /* ---------------------------------------------------------------- 图表（内联 SVG，离线） */
 const LineChart = {
   props: { series: Array, labels: Array, height: { default: 240 } },
@@ -230,7 +249,7 @@ const DataPage = {
     <el-card><div class="card-h"><h2>数据质量 issue</h2><span class="sub">{{issues.length}} 条</span></div>
       <el-table :data="issues" size="small" max-height="420">
         <el-table-column prop="ts" label="交易日" width="110"/>
-        <el-table-column prop="symbol" label="标的" width="110"/>
+        <el-table-column label="标的" width="180"><template #default="{row}"><sym-cell :symbol="row.symbol"/></template></el-table-column>
         <el-table-column prop="kind" label="类型" width="200"/>
         <el-table-column prop="detail" label="详情"/>
         <el-table-column label="阻断" width="80"><template #default="s">
@@ -249,7 +268,8 @@ const DataPage = {
     <el-dialog v-model="dlg" title="新增数据修正（原行保留，另记流水）" width="480">
       <el-form label-width="90">
         <el-form-item label="交易日"><el-input v-model="form.ts" placeholder="2024-01-02"/></el-form-item>
-        <el-form-item label="标的"><el-input v-model="form.symbol"/></el-form-item>
+        <el-form-item label="标的"><el-input v-model="form.symbol"/>
+          <sym-cell v-if="form.symbol" :symbol="form.symbol"/></el-form-item>
         <el-form-item label="字段"><el-input v-model="form.field"/></el-form-item>
         <el-form-item label="新值"><el-input v-model="form.new_value"/></el-form-item>
         <el-form-item label="理由"><el-input v-model="form.reason" type="textarea"/></el-form-item>
@@ -350,7 +370,7 @@ const Backtest = {
       <el-card style="margin-top:16px"><div class="card-h"><h2>拒单留痕</h2><span class="sub">{{orders.length}} 笔</span></div>
         <el-table :data="orders.slice(0,200)" size="small" max-height="320">
           <el-table-column prop="exec_date" label="执行日" width="110"/>
-          <el-table-column prop="symbol" label="标的" width="110"/>
+          <el-table-column label="标的" width="180"><template #default="{row}"><sym-cell :symbol="row.symbol"/></template></el-table-column>
           <el-table-column prop="side" label="方向" width="70"/>
           <el-table-column prop="reject_reason" label="原因"/>
         </el-table>
@@ -418,7 +438,7 @@ const Signals = {
         </div>
       </div>
       <el-table :data="cur.items" size="small" max-height="360" style="margin-top:12px">
-        <el-table-column prop="symbol" label="标的" width="120"/>
+        <el-table-column label="标的" width="180"><template #default="{row}"><sym-cell :symbol="row.symbol"/></template></el-table-column>
         <el-table-column label="目标权重" width="110"><template #default="s">{{fmtPct(s.row.target_weight)}}</template></el-table-column>
         <el-table-column label="当前权重" width="110"><template #default="s">{{fmtPct(s.row.current_weight)}}</template></el-table-column>
         <el-table-column label="Δ" width="110"><template #default="s">{{fmtPct(s.row.delta)}}</template></el-table-column>
@@ -500,7 +520,7 @@ const Paper = {
     <el-tabs v-model="tab">
       <el-tab-pane label="持仓" name="positions">
         <el-table :data="pos" size="small" max-height="420">
-          <el-table-column prop="ts" label="日期" width="110"/><el-table-column prop="symbol" label="标的" width="110"/>
+          <el-table-column prop="ts" label="日期" width="110"/><el-table-column label="标的" width="180"><template #default="{row}"><sym-cell :symbol="row.symbol"/></template></el-table-column>
           <el-table-column prop="qty" label="数量" width="100"/><el-table-column prop="sellable_qty" label="可售" width="90"/>
           <el-table-column label="市值" width="130"><template #default="s">{{fmtNum(s.row.mv)}}</template></el-table-column>
           <el-table-column label="权重" width="90"><template #default="s">{{fmtPct(s.row.weight)}}</template></el-table-column>
@@ -508,7 +528,7 @@ const Paper = {
       </el-tab-pane>
       <el-tab-pane label="订单/拒单" name="orders">
         <el-table :data="orders" size="small" max-height="420">
-          <el-table-column prop="exec_date" label="执行日" width="110"/><el-table-column prop="symbol" label="标的" width="110"/>
+          <el-table-column prop="exec_date" label="执行日" width="110"/><el-table-column label="标的" width="180"><template #default="{row}"><sym-cell :symbol="row.symbol"/></template></el-table-column>
           <el-table-column prop="side" label="方向" width="70"/><el-table-column prop="filled_qty" label="成交" width="90"/>
           <el-table-column prop="status" label="状态" width="110"/><el-table-column prop="reject_reason" label="拒因"/>
         </el-table>
@@ -536,7 +556,7 @@ const Paper = {
       <el-tab-pane label="流水" name="ledger">
         <el-table :data="led" size="small" max-height="420">
           <el-table-column prop="ts" label="日期" width="110"/><el-table-column prop="kind" label="类型" width="90"/>
-          <el-table-column prop="symbol" label="标的" width="110"/><el-table-column prop="qty" label="数量" width="90"/>
+          <el-table-column label="标的" width="180"><template #default="{row}"><sym-cell :symbol="row.symbol"/></template></el-table-column><el-table-column prop="qty" label="数量" width="90"/>
           <el-table-column label="金额" width="140"><template #default="s">{{fmtNum(s.row.amount)}}</template></el-table-column>
           <el-table-column prop="ref" label="来源(幂等键)"/>
         </el-table>
@@ -605,7 +625,7 @@ const Risk = {
     <el-card style="margin-top:16px"><div class="card-h"><h2>事件</h2></div>
       <el-table :data="events" size="small" max-height="360">
         <el-table-column prop="trade_date" label="日期" width="110"/><el-table-column prop="rule_id" label="规则" width="170"/>
-        <el-table-column prop="symbol" label="标的" width="110"/><el-table-column prop="action" label="动作" width="130"/>
+        <el-table-column label="标的" width="180"><template #default="{row}"><sym-cell :symbol="row.symbol"/></template></el-table-column><el-table-column prop="action" label="动作" width="130"/>
         <el-table-column prop="status" label="状态" width="80"/><el-table-column prop="acked_by" label="确认人" width="90"/>
         <el-table-column label="操作" width="80"><template #default="s">
           <el-button v-if="s.row.status==='open'" size="small" type="primary" @click="openAck(s.row)">确认</el-button>
@@ -684,6 +704,7 @@ const Root = {
     async function refresh() {
       try { st.value = await api("/api/status"); } catch (e) { st.value = null; }
       try { idx.value = await api("/api/indices"); } catch (e) { idx.value = []; }
+      loadNames();
     }
     onMounted(async () => {
       if (token()) await refresh();
@@ -696,7 +717,7 @@ const Root = {
   },
   template: `
   <div v-if="page==='login'"><login/></div>
-  <div v-else>
+  <div v-else class="qp-app">
     <header class="qp-top">
       <span class="qp-brand">QUANT·PRO<small>量化终端</small></span>
       <span class="chip chip-err">LOCAL</span>
@@ -748,4 +769,5 @@ const Root = {
 const app = createApp(Root);
 app.use(ElementPlus, { locale: ElementPlusLocaleZhCn });
 app.component("line-chart", LineChart);
+app.component("sym-cell", SymCell);
 app.mount("#app");

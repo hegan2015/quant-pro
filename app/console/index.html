@@ -9,25 +9,10 @@
 <link rel="stylesheet" href="assets/tokens.css">
 <link rel="stylesheet" href="assets/app.css">
 <style>
+  /* 只保留首屏防闪白：布局与配色一律由 assets/app.css 提供。
+     这里曾复制过一份旧版 .qp-top/.qp-shell/.qp-nav/.qp-foot 规则，内联优先级压过
+     样式表，导致暗色终端的骨架（状态栏高度、导航宽度、吸顶偏移）始终被旧值覆盖。 */
   body{background:var(--bg-1)}
-  #app{min-height:100vh}
-  .qp-top{position:sticky;top:0;z-index:100;background:var(--bg-0);border-bottom:1px solid var(--line-1);
-    display:flex;align-items:center;gap:12px;height:52px;padding:0 24px}
-  .qp-shell{display:flex;min-height:calc(100vh - 52px)}
-  .qp-nav{width:212px;flex:0 0 212px;background:var(--bg-0);border-right:1px solid var(--line-1);padding:16px 0}
-  .qp-main{flex:1;min-width:0;padding:24px}
-  .qp-foot{padding:16px 24px;color:var(--text-3);font-size:12px;border-top:1px solid var(--line-1);background:var(--bg-0)}
-  .el-menu{border-right:none}
-  .kpi-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:16px}
-  .num{font-family:var(--font-num);font-variant-numeric:tabular-nums}
-  .up{color:var(--market-up)} .down{color:var(--market-down)} .neg{color:var(--err-600)}
-  .gate-pass{color:var(--ok-600);font-weight:600}
-  .gate-FAIL{color:var(--err-600);font-weight:600}
-  .gate-skipped{color:var(--text-3)}
-  .gate-WARN{color:var(--warn-600);font-weight:600}
-  .login-box{max-width:420px;margin:12vh auto}
-  svg.chart{width:100%;height:auto;display:block}
-  svg.chart text{font-family:var(--font-num);font-size:10px;fill:var(--text-3)}
 </style>
 </head>
 <body>

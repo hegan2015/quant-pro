@@ -244,6 +244,7 @@ v0.1 提供 `data-theme="dark"` 令牌集（背景 `--bg-0 #12161C`、文本 `#E
 | 收益率/权重 | 2 位百分数，正数带 `+`；`0` 显示 `0.00%` |
 | 差值(bp) | 1 位小数 + 符号；>阈值着色 |
 | 数量 | 千分位整数，卖出零股标 `非整手` |
+| 标的 | 代码（等宽）+ 中文名；名称来自 `GET /api/instruments/names`（登录后取一次全量映射，5.9k 条约 150KB），覆盖含退市标的。名称缺失只留代码，不显示 `null`。退市股保留 `退市XX` 原名的显示价值：数据质量页一眼能看出「复权因子异常」集中在退市标的 |
 | 日期 | `YYYY-MM-DD`（交易日）；时间戳 `YYYY-MM-DD HH:mm:ss` + 时区标注 `Asia/Shanghai` |
 | 空值 | 统一 `—`，并在 tooltip 说明缺失原因（不显示 `null`/`NaN`/`undefined`，走查阻断项） |
 | 状态文案 | 中文语义 + 原始码 tooltip（如 `一字涨停无法买入 / LIMIT_UP_ONE_PU`） |
@@ -390,6 +391,7 @@ open prototype/pages/index.html               # 从总览页点击进入各页
 | 统计条溢出重叠 | 年化/Sharpe/回撤/峰谷四项 flex 挤压重叠 | 改 `.stats` 网格 + `.stat` 块级布局 |
 | 按钮断行 | 「取消」被挤成两行 | `.btn{white-space:nowrap}` |
 | 脏值扫描误报 | 技术标签（如「置 NaN 重跑」）被当脏值 | 扫描范围收敛到表格单元格与 KPI 数值 |
+| 状态栏掉出首屏 | `index.html` 的内联 `<style>` 复制了一份改版前的骨架规则，优先级压过 `assets/app.css`，`calc(100vh - 52px)` 把页脚顶到折叠线以下（实测 `scrollHeight 985 > innerHeight 900`，页脚 y=934） | 内联只留防闪白的 `body{background}`（`.el-menu` 已无引用一并删）；骨架改 `.qp-app` flex 列 + `.qp-shell{flex:1}`，行情条吸顶、导航吸顶偏移按真实头部取 82px；`ui_smoke` 新增断言「状态栏底边必须 ≤ 视口高度」 |
 
 ### 14.2a 金融终端风格要点（v0.2）
 
@@ -400,6 +402,7 @@ open prototype/pages/index.html               # 从总览页点击进入各页
 | KPI 卡 | 左侧 3px 色条 + 等宽大数字 + 迷你走势线（`Spark`，复用净值序列，不额外请求） |
 | 图表 | 渐变面积 + 图例 + 真实年月横轴 + 基准线（`/api/backtests/{id}/equity` 现算 benchmark_nav，不落库） |
 | 表格 | 粘性表头、行条带、数字右对齐 tabular、拒因中文+码双列 |
+| 标的列 | `SymCell` 全局组件：代码（等宽）+ 中文名（`GET /api/instruments/names` 登录后取一次全量映射）。7 张表统一；退市标的保留「退市XX」原名，数据质量页一眼看出异常集中在退市股（如 `600200.SH 退市苏昊` 的复权因子缺项） |
 | 状态栏 | 页脚常驻数据水位：最新交易日 / 行数 / `dv` 指纹 / store 模式 / run 数 / 免责声明 |
 | 加载态 | 与空态严格区分：加载中显示骨架，不再误报「尚无回测记录」 |
 

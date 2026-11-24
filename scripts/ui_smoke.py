@@ -42,6 +42,11 @@ def main() -> int:
         # 断言总览真的渲染出净值图（曾经加载态被误显示为「尚无回测记录」）
         page.wait_for_selector("svg.chart", timeout=30000)
         assert "尚无回测记录" not in page.inner_text("main"), "总览把加载中空当成无数据"
+        # 数据水位状态栏必须留在首屏视口内（曾用 calc(100vh - 108px) 魔数把它挤到折叠线以下）
+        foot_box = page.locator("footer.qp-foot").bounding_box()
+        vh = page.evaluate("window.innerHeight")
+        assert foot_box and foot_box["y"] + foot_box["height"] <= vh + 1, (
+            f"状态栏不在视口内：{foot_box} innerHeight={vh}")
         page.wait_for_timeout(800)
         page.screenshot(path=str(OUT / "01-dashboard.png"))
         shots.append("01-dashboard")
@@ -58,6 +63,11 @@ def main() -> int:
             page.goto(BASE + "/#/" + key)
             page.wait_for_selector(wait, timeout=20000)
             page.wait_for_timeout(600)
+            if key == "data":
+                # 标的列必须解析出中文名（名称映射来自 /api/instruments/names，登录后取一次）
+                cells = page.locator(".sym-cell").count()
+                named = page.locator(".sym-cell .nm").count()
+                assert cells > 0 and named == cells, f"标的列缺中文名：{named}/{cells}"
             page.screenshot(path=str(OUT / f"{name}.png"))
             shots.append(name)
 

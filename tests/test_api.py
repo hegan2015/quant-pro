@@ -43,8 +43,18 @@ def test_static_mount_does_not_shadow_api_routes(client):
     api_after = [r.path for r in app.routes[mount_idx + 1:] if getattr(r, "path", "").startswith("/api")]
     assert not api_after, f"这些 /api 路由定义在静态挂载之后，会被遮蔽：{api_after}"
     for path in ("/api/signals", "/api/paper/accounts", "/api/risk/rules",
-                 "/api/risk/events", "/api/risk/breaker", "/api/factors"):
+                 "/api/risk/events", "/api/risk/breaker", "/api/factors",
+                 "/api/instruments/names"):
         assert c.get(path).status_code == 200, f"{path} 被静态挂载吞掉（404）"
+
+
+def test_instrument_names_map(client):
+    """标的名称映射：控制台「标的」列靠它把代码解析成中文名，不得有 null 值。"""
+    c, db, tok = client
+    names = c.get("/api/instruments/names").json()
+    assert names, "映射为空，标的列会全部退化成裸代码"
+    assert set(names) == set(db.instruments()["symbol"]), "映射必须覆盖全部标的（含退市）"
+    assert all(isinstance(v, str) for v in names.values()), "名称缺失应填空串而非 null"
 
 
 def test_healthz_open_and_api_gated(client):
